@@ -1,0 +1,6 @@
+.idea
+.vagrant
+pkg
+oxkube
+src
+build
