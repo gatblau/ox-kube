@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: echo-app-pod
+  namespace: echo-app-project
+spec:
+  containers:
+    - image: k8s.gcr.io/echoserver:1.10
+      imagePullPolicy: Always
+      name: echo-app
+      resources:
+        requests:
+          memory: "0.5Gi"
+          cpu: "500m"
+        limits:
+          memory: "1Gi"
+          cpu: "500m"
+  restartPolicy: Always
+...
