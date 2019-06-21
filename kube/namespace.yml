@@ -3,7 +3,7 @@ apiVersion: v1
 kind: Project
 metadata:
   annotations:
-    openshift.io/description: "Namespace deploying echo app."
-    openshift.io/display-name: "Echo App"
-  name: echo-app-project
+    openshift.io/description: "Demo app namespace."
+    openshift.io/display-name: "Demo App"
+  name: demo-project
 ...

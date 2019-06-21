@@ -2,13 +2,13 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: echo-app-pod
-  namespace: echo-app-project
+  name: demo
+  namespace: demo-project
 spec:
   containers:
-    - image: k8s.gcr.io/echoserver:1.10
+    - image: nginxdemos/hello
       imagePullPolicy: Always
-      name: echo-app
+      name: demo
       resources:
         requests:
           memory: "0.5Gi"

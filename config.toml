@@ -1,0 +1,20 @@
+# the indtance Id for logging identification purposes
+Id = "OxKube-01"
+LogLevel = "Info"
+
+# CMDB endpoint to update
+[Onix]
+    URL = "localhost:8080"
+
+# event consumers
+[Consumers]
+    # selected event consumer (i.e. webhook, broker)
+    Consumer = 'webhook'
+
+    # webhook consumer details
+    [Webhook]
+    Port = 8080
+    Path = "webhook"
+
+    # broker consumer details
+    [Broker]
