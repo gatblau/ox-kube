@@ -15,78 +15,57 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"os"
-	"os/signal"
-	"time"
+	"github.com/sirupsen/logrus"
+	"strings"
 )
 
-// launch a webhook on a TCP port listening for events
-func runWebhook() {
-	// creates an http server listening on the specified TCP port
-	server := &http.Server{Addr: fmt.Sprintf(":%s", getPort()), Handler: nil}
+type OxKube struct {
+	config *Config
+	log    *logrus.Entry
+}
 
-	// registers a handler for the /webhook endpoint
-	http.HandleFunc("/webhook", webhook)
-
-	// runs the server asynchronously
-	go func() {
-		log.Println(fmt.Sprintf("oxkube listening on :%s/webhook", getPort()))
-		if err := server.ListenAndServe(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	// creates a channel to pass a SIGINT (ctrl+C) kernel signal with buffer capacity 1
-	stop := make(chan os.Signal, 1)
-
-	// sends any SIGINT signal to the stop channel
-	signal.Notify(stop, os.Interrupt)
-
-	// waits for the SIGINT signal to be raised (pkill -2)
-	<-stop
-
-	// gets a context with some delay to shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
-	// releases resources if main completes before the delay period elapses
-	defer cancel()
-
-	// on error shutdown
-	if err := server.Shutdown(ctx); err != nil {
-		log.Fatal(err)
-		log.Println("shutting down oxkube")
+func (k *OxKube) start() error {
+	err := k.loadConfig()
+	if err != nil {
+		return err
 	}
+	switch k.config.Consumers.Consumer {
+	case "webhook":
+		wh := Webhook{}
+		wh.Start(k.config.Consumers.Webhook)
+	case "broker":
+		panic("Broker consumer is not implemented.")
+	default:
+		panic(fmt.Sprintf("Mode '%s' is not implemented.", k.config.Consumers.Consumer))
+	}
+	return nil
 }
 
-func getPort() string {
-	return getEnv("OX_KUBE_PORT", "8080")
-}
-
-func getMode() string {
-	return getEnv("OX_KUBE_MODE", "webhook")
-}
-
-func getEnv(key string, defaultValue string) string {
-	value := ""
-	if os.Getenv(key) != "" {
-		value = os.Getenv(key)
+// load the configuration file
+func (k *OxKube) loadConfig() error {
+	// loads the configuration
+	c, err := NewConfig()
+	if err == nil {
+		k.config = &c
 	} else {
-		value = defaultValue
+		return err
 	}
-	return value
-}
 
-func webhook(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	switch r.Method {
-	case "GET":
-		io.WriteString(w, "OxKube is ready to process events posted to this endpoint")
-	case "POST":
+	// adds the platform field to the logger
+	k.log = logrus.WithFields(logrus.Fields{
+		"Id": k.config.Id,
+	})
 
+	// try and parse the logging level in the configuration
+	level, err := logrus.ParseLevel(c.LogLevel)
+	if err != nil {
+		// if the value was not recognised then return the error
+		k.log.Errorf("Failed to recognise value LogLevel entry in the configuration: %s.", err)
+		return err
 	}
+	// otherwise sets the logging level for the entire system
+	logrus.SetLevel(level)
+	k.log.Infof("%s has been set as the logger level.", strings.ToUpper(c.LogLevel))
+	return nil
 }

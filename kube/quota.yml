@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: ResourceQuota
 metadata:
-  name: echo-compute-resources
+  name: demo-quota
 spec:
   hard:
     pods: "4"

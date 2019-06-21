@@ -12,12 +12,8 @@
    Contributors to this project, hereby assign copyright in this code to the project,
    to be licensed under the same terms as the rest of the code.
 */
+
 package main
 
-/*
-	oxkube is an Onix CMDB agent which consume change events and updates the CMDB
-*/
-func main() {
-	oxkube := OxKube{}
-	oxkube.start()
+type Consumer interface {
 }
