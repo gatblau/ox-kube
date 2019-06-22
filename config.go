@@ -65,6 +65,7 @@ func NewConfig() (Config, error) {
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
 	_ = v.BindEnv("Id")
+	_ = v.BindEnv("LogLevel")
 	_ = v.BindEnv("Onix.URL")
 	_ = v.BindEnv("Consumers.Consumer")
 	_ = v.BindEnv("Consumers.Webhook.Port")
@@ -75,6 +76,7 @@ func NewConfig() (Config, error) {
 
 	// general configuration
 	c.Id = v.GetString("Id")
+	c.LogLevel = v.GetString("LogLevel")
 	c.Onix.URL = v.GetString("Onix.URL")
 	c.Consumers.Consumer = v.GetString("Consumers.Consumer")
 	c.Consumers.Webhook.Port = v.GetString("Consumers.Webhook.Port")
