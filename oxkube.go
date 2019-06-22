@@ -32,8 +32,11 @@ func (k *OxKube) start() error {
 	}
 	switch k.config.Consumers.Consumer {
 	case "webhook":
-		wh := Webhook{}
-		wh.Start(k.config.Consumers.Webhook)
+		wh := Webhook{
+			log:    k.log,
+			config: k.config.Consumers.Webhook,
+		}
+		wh.Start()
 	case "broker":
 		panic("Broker consumer is not implemented.")
 	default:
