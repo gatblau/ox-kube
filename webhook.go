@@ -18,8 +18,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,21 +27,27 @@ import (
 )
 
 type Webhook struct {
+	log    *logrus.Entry
+	config WebhookConf
 }
 
 // launch a webhook on a TCP port listening for events
-func (c *Webhook) Start(conf WebhookConf) {
+func (c *Webhook) Start() {
 	// creates an http server listening on the specified TCP port
-	server := &http.Server{Addr: fmt.Sprintf(":%s", conf.Port), Handler: nil}
+	server := &http.Server{Addr: fmt.Sprintf(":%s", c.config.Port), Handler: nil}
 
-	// registers a handler for the /Path endpoint
-	http.HandleFunc(conf.Path, c.run)
+	// registers web handlers
+	c.log.Tracef("Registering handler for web root /")
+	http.HandleFunc("/", c.rootHandler)
+
+	c.log.Tracef("Registering handler for web path /%s.", c.config.Path)
+	http.HandleFunc(fmt.Sprintf("/%s", c.config.Path), c.webhookHandler)
 
 	// runs the server asynchronously
 	go func() {
-		log.Println(fmt.Sprintf("oxkube listening on :%s/%s", conf.Port, conf.Path))
+		c.log.Println(fmt.Sprintf("OxKube listening on :%s", c.config.Port))
 		if err := server.ListenAndServe(); err != nil {
-			log.Fatal(err)
+			c.log.Fatal(err)
 		}
 	}()
 
@@ -62,17 +68,32 @@ func (c *Webhook) Start(conf WebhookConf) {
 
 	// on error shutdown
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatal(err)
-		log.Println("shutting down Webhook consumer")
+		c.log.Fatal(err)
+		c.log.Println("Shutting down Webhook consumer.")
 	}
 }
 
-func (c *Webhook) run(w http.ResponseWriter, r *http.Request) {
+func (c *Webhook) webhookHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	switch r.Method {
 	case "GET":
-		io.WriteString(w, "OxKube is ready to process events posted to this endpoint")
+		io.WriteString(w, "OxKube webhook is ready.\n"+
+			"Use an HTTP POST to send events.")
 	case "POST":
 
+	}
+}
+
+func (c *Webhook) rootHandler(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	switch r.Method {
+	case "GET":
+		io.WriteString(w, fmt.Sprintf("OxKube is ready.\n"+
+			"POST events to webhook: /%s.", c.config.Path))
+	case "POST":
+	case "PUT":
+	case "DELETE":
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte("405 - Method Not Allowed"))
 	}
 }

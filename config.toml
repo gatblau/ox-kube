@@ -1,6 +1,6 @@
 # the indtance Id for logging identification purposes
 Id = "OxKube-01"
-LogLevel = "Info"
+LogLevel = "Trace"
 
 # CMDB endpoint to update
 [Onix]
