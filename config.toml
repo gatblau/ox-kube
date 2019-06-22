@@ -12,9 +12,9 @@ LogLevel = "Info"
     Consumer = 'webhook'
 
     # webhook consumer details
-    [Webhook]
-    Port = 8080
-    Path = "webhook"
+    [Consumers.Webhook]
+        Port = "8080"
+        Path = "webhook"
 
     # broker consumer details
-    [Broker]
+    [Consumers.Broker]
