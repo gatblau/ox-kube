@@ -23,23 +23,60 @@ import (
 type OxKube struct {
 	config *Config
 	log    *logrus.Entry
+	client *Client
 }
 
 func (k *OxKube) start() error {
-	err := k.loadConfig()
+	var err error
+	// load the configuration file
+	err = k.loadConfig()
 	if err != nil {
 		return err
 	}
+	// initialises the Onix REST client
+	k.client, err = NewClient(k.log, k.config)
+	if err != nil {
+		return err
+	}
+	// checks if a meta model for K8S is defined in Onix
+	k.log.Tracef("Checking if the KUBE meta-model is defined in Onix.")
+	exist, err := ModelExists(k.client)
+	if err != nil {
+		k.log.Errorf("Failed to check if the KUBE meta-model exists in Onix: %s.", err)
+		return err
+	}
+	// if not...
+	if !exist {
+		// creates a meta model
+		k.log.Tracef("The KUBE meta-model is not yet defined in Onix, proceeding to create it.")
+		result, err := CreateModel(k.client)
+		if err != nil {
+			k.log.Errorf("Failed to create the KUBE meta-model in Onix: %s.", err)
+			return err
+		}
+		if result.Error {
+			k.log.Errorf("Failed to create the KUBE meta-model in Onix: %s.", result.Message)
+		} else {
+			k.log.Tracef("KUBE meta-model successfully created.")
+		}
+	} else {
+		k.log.Tracef("KUBE meta-model found in Onix.")
+	}
+	// start the configured consumer
 	switch k.config.Consumers.Consumer {
 	case "webhook":
+		k.log.Tracef("Webhook consumer has been selected.")
 		wh := Webhook{
 			log:    k.log,
 			config: k.config.Consumers.Webhook,
 		}
-		wh.Start()
+		k.log.Tracef("Starting the webhook consumer.")
+		wh.Start(k.client)
 	case "broker":
+		k.log.Tracef("Broker consumer has been selected.")
 		panic("Broker consumer is not implemented.")
 	default:
+		k.log.Tracef("No consumer has been selected.")
 		panic(fmt.Sprintf("Mode '%s' is not implemented.", k.config.Consumers.Consumer))
 	}
 	return nil

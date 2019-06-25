@@ -12,8 +12,28 @@
    Contributors to this project, hereby assign copyright in this code to the project,
    to be licensed under the same terms as the rest of the code.
 */
-
 package main
 
-type Consumer interface {
+import (
+	"bytes"
+)
+
+type Item struct {
+	Key         string        `json:"key"`
+	Name        string        `json:"name"`
+	Description string        `json:"description"`
+	Status      int           `json:"status"`
+	Type        string        `json:"type"`
+	Tag         []interface{} `json:"tag"`
+	Meta        *MAP          `json:"meta"`
+	Attribute   *MAP          `json:"attribute"`
+	Partition   string        `json:"partition"`
+}
+
+func (item *Item) ToJSON() (*bytes.Reader, error) {
+	return GetJSONBytesReader(item)
+}
+
+func (item *Item) KeyValue() string {
+	return item.Key
 }

@@ -19,20 +19,27 @@ import (
 	"context"
 	"fmt"
 	"github.com/sirupsen/logrus"
+	"github.com/tidwall/gjson"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 )
 
 type Webhook struct {
 	log    *logrus.Entry
 	config WebhookConf
+	ox     *Client
 }
 
 // launch a webhook on a TCP port listening for events
-func (c *Webhook) Start() {
+func (c *Webhook) Start(client *Client) {
+	// set the ox client
+	c.ox = client
+
 	// creates an http server listening on the specified TCP port
 	server := &http.Server{Addr: fmt.Sprintf(":%s", c.config.Port), Handler: nil}
 
@@ -77,10 +84,10 @@ func (c *Webhook) webhookHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	switch r.Method {
 	case "GET":
-		io.WriteString(w, "OxKube webhook is ready.\n"+
+		_, _ = io.WriteString(w, "OxKube webhook is ready.\n"+
 			"Use an HTTP POST to send events.")
 	case "POST":
-
+		c.process(w, r)
 	}
 }
 
@@ -88,12 +95,51 @@ func (c *Webhook) rootHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	switch r.Method {
 	case "GET":
-		io.WriteString(w, fmt.Sprintf("OxKube is ready.\n"+
+		_, _ = io.WriteString(w, fmt.Sprintf("OxKube is ready.\n"+
 			"POST events to webhook: /%s.", c.config.Path))
 	case "POST":
 	case "PUT":
 	case "DELETE":
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		w.Write([]byte("405 - Method Not Allowed"))
+		_, _ = w.Write([]byte("405 - Method Not Allowed"))
 	}
+}
+
+func (c *Webhook) process(w http.ResponseWriter, r *http.Request) error {
+	// get the request data
+	event, err := c.getRequest(r)
+
+	if err != nil {
+		return err
+	}
+
+	result := gjson.GetBytes(event, "Change.kind")
+
+	switch strings.ToLower(result.String()) {
+	case "namespace":
+		c.ox.putNamespace(event)
+	case "pod":
+		c.ox.putPod(event)
+	case "service":
+		c.ox.putService(event)
+	case "resourcequota":
+		c.ox.putResourceQuota(event)
+	case "persistenvolume":
+		c.ox.putPersistentVolume(event)
+	case "ingress":
+		c.ox.putIngress(event)
+	case "replicationcontroller":
+		c.ox.putReplicationController(event)
+	}
+
+	return nil
+}
+
+// unmarshal the http request into a json like structure
+func (c *Webhook) getRequest(r *http.Request) ([]byte, error) {
+	bytes, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	return bytes, nil
 }
