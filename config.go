@@ -27,7 +27,13 @@ type Config struct {
 }
 
 type Onix struct {
-	URL string
+	URL          string
+	Username     string
+	Password     string
+	ClientId     string
+	ClientSecret string
+	TokeURI      string
+	AuthMode     string
 }
 
 type Consumers struct {
@@ -37,8 +43,10 @@ type Consumers struct {
 }
 
 type WebhookConf struct {
-	Port string
-	Path string
+	Port     string
+	Path     string
+	Username string
+	Password string
 }
 
 type BrokerConf struct {
@@ -67,6 +75,12 @@ func NewConfig() (Config, error) {
 	_ = v.BindEnv("Id")
 	_ = v.BindEnv("LogLevel")
 	_ = v.BindEnv("Onix.URL")
+	_ = v.BindEnv("Onix.AuthMode")
+	_ = v.BindEnv("Onix.Username")
+	_ = v.BindEnv("Onix.Password")
+	_ = v.BindEnv("Onix.ClientId")
+	_ = v.BindEnv("Onix.ClientSecret")
+	_ = v.BindEnv("Onix.TokenURI")
 	_ = v.BindEnv("Consumers.Consumer")
 	_ = v.BindEnv("Consumers.Webhook.Port")
 	_ = v.BindEnv("Consumers.Webhook.Path")
@@ -78,6 +92,12 @@ func NewConfig() (Config, error) {
 	c.Id = v.GetString("Id")
 	c.LogLevel = v.GetString("LogLevel")
 	c.Onix.URL = v.GetString("Onix.URL")
+	c.Onix.AuthMode = v.GetString("Onix.AuthMode")
+	c.Onix.Username = v.GetString("Onix.Username")
+	c.Onix.Password = v.GetString("Onix.Password")
+	c.Onix.ClientId = v.GetString("Onix.ClientId")
+	c.Onix.ClientSecret = v.GetString("Onix.ClientSecret")
+	c.Onix.TokeURI = v.GetString("Onix.TokenURI")
 	c.Consumers.Consumer = v.GetString("Consumers.Consumer")
 	c.Consumers.Webhook.Port = v.GetString("Consumers.Webhook.Port")
 	c.Consumers.Webhook.Path = v.GetString("Consumers.Webhook.Path")

@@ -4,7 +4,13 @@ LogLevel = "Trace"
 
 # CMDB endpoint to update
 [Onix]
-    URL = "localhost:8080"
+    URL = "http://localhost:8080"
+    AuthMode = "basic"
+    Username = "admin"
+    Password = "0n1x"
+    ClientId = ""
+	ClientSecret = ""
+	TokenURI = ""
 
 # event consumers
 [Consumers]
@@ -13,7 +19,7 @@ LogLevel = "Trace"
 
     # webhook consumer details
     [Consumers.Webhook]
-        Port = "8080"
+        Port = "8000"
         Path = "webhook"
 
     # broker consumer details
