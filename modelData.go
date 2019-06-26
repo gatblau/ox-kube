@@ -33,7 +33,7 @@ const (
 
 // checks the kube model is defined in Onix
 func ModelExists(ox *Client) (bool, error) {
-	model, err := ox.Get("model", "kube")
+	model, err := ox.Get("model", K8SModel)
 	if err != nil {
 		return false, err
 	}

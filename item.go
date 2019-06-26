@@ -25,8 +25,8 @@ type Item struct {
 	Status      int           `json:"status"`
 	Type        string        `json:"type"`
 	Tag         []interface{} `json:"tag"`
-	Meta        *MAP          `json:"meta"`
-	Attribute   *MAP          `json:"attribute"`
+	Meta        MAP           `json:"meta"`
+	Attribute   MAP           `json:"attribute"`
 	Partition   string        `json:"partition"`
 }
 
