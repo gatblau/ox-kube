@@ -22,15 +22,18 @@ import (
 	"github.com/tidwall/gjson"
 	"io"
 	"net/http"
+	"strings"
 )
 
 const (
 	Key         = "Object.metadata.name"
-	Name        = "Object.metadata.annotations.openshift.io\\/display-name"
-	Description = "Object.metadata.annotations.openshift.io\\/description"
+	Name        = "openshift.io/display-name"
+	Description = "openshift.io/description"
 	Created     = "Object.metadata.creationTimestamp"
-	Requester   = "Object.metadata.annotations.openshift.io\\/requester"
+	Requester   = "openshift.io/requester"
 	MetaInfo    = "Object"
+	Annotations = "Object.metadata.annotations"
+	Cluster     = "Change.host"
 )
 
 type Client struct {
@@ -202,34 +205,28 @@ func (c *Client) Delete(payload Payload, resourceName string, result interface{}
 }
 
 func (c *Client) putNamespace(event []byte) {
-	key := gjson.GetBytes(event, Key)
-	name := gjson.GetBytes(event, Name)
-	description := gjson.GetBytes(event, Description)
-	meta := gjson.GetBytes(event, MetaInfo)
-	//created := gjson.GetBytes(event, Created)
-	//requester := gjson.GetBytes(event, Requester)
-	item := &Item{
-		Key:         key.String(),
-		Name:        name.String(),
-		Description: description.String(),
-		Meta:        new(MAP),
-		Type:        K8SNamespace,
+	// ensures the K8S cluster config item exists
+	clusterKey, success := c.putResource(c.getClusterItem(event), "item")
+
+	if !success {
+		return
 	}
-	err := json.Unmarshal([]byte(meta.String()), item.Meta)
+
+	// gets the namespace item information
+	item, err := c.getNamespaceItem(event)
 	if err != nil {
-		c.Log.Errorf("Failed to unmarshal event metadata: %s.", err)
+		c.Log.Errorf("Failed to get Namespace information: %s", err)
 		return
 	}
-	result, err := c.Put(item, "item")
-	if err != nil {
-		c.Log.Errorf("Failed to PUT Item: %s.", err)
+	// push the item to the CMDB
+	namespaceKey, success := c.putResource(item, "item")
+
+	if !success {
 		return
 	}
-	if result.Error {
-		c.Log.Errorf("Failed to PUT Item: %s.", result.Message)
-		return
-	}
-	c.Log.Tracef("Item: %s successfully updated in Onix.", item.Key)
+
+	// push a link between items
+	c.putResource(c.getLink(clusterKey, namespaceKey), "link")
 }
 
 func (c *Client) putPod(event []byte) {
@@ -248,4 +245,96 @@ func (c *Client) putReplicationController(event []byte) {
 }
 
 func (c *Client) putIngress(event []byte) {
+}
+
+// issues an http put request to the Onix CMDB passing the specified item
+// returns the payload key and a success flag
+func (c *Client) putResource(payload Payload, resourceName string) (string, bool) {
+	result, err := c.Put(payload, resourceName)
+	if err != nil {
+		c.Log.Errorf("Failed to PUT %s: %s.", resourceName, err)
+		return "", false
+	}
+	if result.Error {
+		c.Log.Errorf("Failed to PUT %s: %s.", resourceName, result.Message)
+		return "", false
+	}
+	if result.Changed {
+		c.Log.Tracef("%s: %s successfully updated in Onix.", resourceName, payload.KeyValue())
+		return payload.KeyValue(), true
+	}
+	c.Log.Tracef("%s: %s, Onix reports nothing to update.", resourceName, payload.KeyValue())
+	return payload.KeyValue(), true
+}
+
+func (c *Client) getNamespaceItem(event []byte) (*Item, error) {
+	cluster := gjson.GetBytes(event, Cluster)
+	key := gjson.GetBytes(event, Key)
+	annot := gjson.GetBytes(event, Annotations).Map()
+	meta := gjson.GetBytes(event, MetaInfo)
+	created := gjson.GetBytes(event, Created)
+	item := &Item{
+		Key:         fmt.Sprintf("k8s:cluster:%s:ns:%s", cluster.String(), key.String()),
+		Name:        annot[Name].String(),
+		Description: annot[Description].String(),
+		Meta:        MAP{},
+		Attribute:   MAP{},
+		Type:        K8SNamespace,
+	}
+	item.Attribute["Requester"] = annot[Requester].String()
+	item.Attribute["Created"] = created.String()
+
+	err := json.Unmarshal([]byte(meta.String()), &item.Meta)
+	if err != nil {
+		c.Log.Errorf("Failed to unmarshal event metadata: %s.", err)
+		return nil, err
+	}
+	return item, nil
+}
+
+func (c *Client) getClusterItem(event []byte) *Item {
+	host := gjson.GetBytes(event, Cluster)
+	return &Item{
+		Key:         fmt.Sprintf("k8s:cluster:%s", host.String()),
+		Name:        fmt.Sprintf("%s Container Platform", strings.ToUpper(host.String())),
+		Description: "A Kubernetes Cluster instance.",
+		Type:        K8SCluster,
+	}
+}
+
+func (c *Client) getLink(startItem string, endItem string) Payload {
+	return &Link{
+		Key:          fmt.Sprintf("%s->%s", startItem, endItem),
+		StartItemKey: startItem,
+		EndItemKey:   endItem,
+		Type:         K8SLink,
+	}
+}
+
+func (c *Client) deleteNamespace(bytes []byte) {
+	panic("deleteNamespace() not implemented")
+}
+
+func (c *Client) deletePod(bytes []byte) {
+	panic("deletePod() not implemented")
+}
+
+func (c *Client) deleteService(bytes []byte) {
+	panic("deleteService() not implemented")
+}
+
+func (c *Client) deleteResourceQuota(bytes []byte) {
+	panic("deleteResourceQuota() not implemented")
+}
+
+func (c *Client) deletePersistentVolume(bytes []byte) {
+	panic("deletePersistentVolume() not implemented")
+}
+
+func (c *Client) deleteIngress(bytes []byte) {
+	panic("deleteIngress() not implemented")
+}
+
+func (c *Client) deleteReplicationController(bytes []byte) {
+	panic("deleteReplicationController() not implemented")
 }

@@ -112,26 +112,76 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// get the kind of K8S object
+	chgKind := gjson.GetBytes(event, "Change.kind")
+	// get the type of change
+	chgType := gjson.GetBytes(event, "Change.type")
 
-	result := gjson.GetBytes(event, "Change.kind")
-
-	switch strings.ToLower(result.String()) {
+	switch strings.ToLower(chgKind.String()) {
 	case "namespace":
-		c.ox.putNamespace(event)
+		switch strings.ToLower(chgType.String()) {
+		case "create":
+			fallthrough
+		case "update":
+			c.ox.putNamespace(event)
+		case "delete":
+			c.ox.deleteNamespace(event)
+		}
 	case "pod":
-		c.ox.putPod(event)
+		switch strings.ToLower(chgType.String()) {
+		case "create":
+			fallthrough
+		case "update":
+			c.ox.putPod(event)
+		case "delete":
+			c.ox.deletePod(event)
+		}
 	case "service":
-		c.ox.putService(event)
+		switch strings.ToLower(chgType.String()) {
+		case "create":
+			fallthrough
+		case "update":
+			c.ox.putService(event)
+		case "delete":
+			c.ox.deleteService(event)
+		}
 	case "resourcequota":
-		c.ox.putResourceQuota(event)
+		switch strings.ToLower(chgType.String()) {
+		case "create":
+			fallthrough
+		case "update":
+			c.ox.putResourceQuota(event)
+		case "delete":
+			c.ox.deleteResourceQuota(event)
+		}
 	case "persistenvolume":
-		c.ox.putPersistentVolume(event)
+		switch strings.ToLower(chgType.String()) {
+		case "create":
+			fallthrough
+		case "update":
+			c.ox.putPersistentVolume(event)
+		case "delete":
+			c.ox.deletePersistentVolume(event)
+		}
 	case "ingress":
-		c.ox.putIngress(event)
+		switch strings.ToLower(chgType.String()) {
+		case "create":
+			fallthrough
+		case "update":
+			c.ox.putIngress(event)
+		case "delete":
+			c.ox.deleteIngress(event)
+		}
 	case "replicationcontroller":
-		c.ox.putReplicationController(event)
+		switch strings.ToLower(chgType.String()) {
+		case "create":
+			fallthrough
+		case "update":
+			c.ox.putReplicationController(event)
+		case "delete":
+			c.ox.deleteReplicationController(event)
+		}
 	}
-
 	return nil
 }
 
