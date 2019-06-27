@@ -19,21 +19,24 @@ import (
 	"errors"
 	"fmt"
 	"github.com/sirupsen/logrus"
-	"github.com/tidwall/gjson"
 	"io"
 	"net/http"
-	"strings"
 )
 
 const (
-	Key         = "Object.metadata.name"
-	Name        = "openshift.io/display-name"
-	Description = "openshift.io/description"
-	Created     = "Object.metadata.creationTimestamp"
-	Requester   = "openshift.io/requester"
-	MetaInfo    = "Object"
-	Annotations = "Object.metadata.annotations"
-	Cluster     = "Change.host"
+	Key                    = "Object.metadata.name"
+	Annotation_Name        = "openshift.io/display-name"
+	Annotation_Description = "openshift.io/description"
+	Created                = "Object.metadata.creationTimestamp"
+	Annotation_Requester   = "openshift.io/requester"
+	ObjectInfo             = "Object"
+	SpecInfo               = "Object.spec"
+	Annotations            = "Object.metadata.annotations"
+	Cluster                = "Change.host"
+	Annotation_SCC         = "openshift.io/scc"
+	Annotation_GeneratedBy = "openshift.io/generated-by"
+	Namespace              = "Change.namespace"
+	Selector               = "Object.spec.selector"
 )
 
 type Client struct {
@@ -56,7 +59,7 @@ func NewClient(log *logrus.Entry, cfg *Config) (*Client, error) {
 	return client, err
 }
 
-// Set up the authentication Token used by the client
+// sets up the authentication Token used by the client
 func (c *Client) setAuthenticationToken() error {
 	var err error = nil
 	switch c.Config.Onix.AuthMode {
@@ -80,7 +83,7 @@ func (c *Client) setAuthenticationToken() error {
 	return err
 }
 
-// Make a generic HTTP request
+// makes a generic HTTP request
 func (c *Client) makeRequest(method string, resourceName string, key string, payload io.Reader) (*Result, error) {
 	var (
 		req *http.Request
@@ -130,8 +133,8 @@ func (c *Client) makeRequest(method string, resourceName string, key string, pay
 	return result, err
 }
 
-// Make a GET HTTP request to the WAPI
-func (c *Client) Get(resourceName string, key string) (interface{}, error) {
+// makes a GET HTTP request to the WAPI
+func (c *Client) getResource(resourceName string, key string) (interface{}, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s/%s", c.Config.Onix.URL, resourceName, key), nil)
 	req.Header.Set("Content-Type", "application/json")
 	// only add authorisation header if there is a token
@@ -182,75 +185,27 @@ func (c *Client) Get(resourceName string, key string) (interface{}, error) {
 	return nil, nil
 }
 
-// Executes an HTTP PUT request to the Onix WAPI passing the following parameters:
-// - payload: the payload object
-// - resourceName: the WAPI resource name (e.g. item, itemtype, link, etc.)
-func (c *Client) Put(payload Payload, resourceName string) (*Result, error) {
-	// converts the passed-in payload to a bytes Reader
-	bytes, err := payload.ToJSON()
-
-	// any errors are returned immediately
-	if err != nil {
-		return nil, err
-	}
-
-	// make an http put request to the service
-	return c.makeRequest(PUT, resourceName, payload.KeyValue(), bytes)
-}
-
-// Make a DELETE HTTP request to the WAPI
-func (c *Client) Delete(payload Payload, resourceName string, result interface{}) (*Result, error) {
+// makes a DELETE HTTP request to the WAPI
+func (c *Client) deleteResource(payload Payload, resourceName string, result interface{}) (*Result, error) {
 	// make an http put request to the service
 	return c.makeRequest(DELETE, resourceName, payload.KeyValue(), nil)
 }
 
-func (c *Client) putNamespace(event []byte) {
-	// ensures the K8S cluster config item exists
-	clusterKey, success := c.putResource(c.getClusterItem(event), "item")
-
-	if !success {
-		return
-	}
-
-	// gets the namespace item information
-	item, err := c.getNamespaceItem(event)
-	if err != nil {
-		c.Log.Errorf("Failed to get Namespace information: %s", err)
-		return
-	}
-	// push the item to the CMDB
-	namespaceKey, success := c.putResource(item, "item")
-
-	if !success {
-		return
-	}
-
-	// push a link between items
-	c.putResource(c.getLink(clusterKey, namespaceKey), "link")
-}
-
-func (c *Client) putPod(event []byte) {
-}
-
-func (c *Client) putService(event []byte) {
-}
-
-func (c *Client) putResourceQuota(event []byte) {
-}
-
-func (c *Client) putPersistentVolume(event []byte) {
-}
-
-func (c *Client) putReplicationController(event []byte) {
-}
-
-func (c *Client) putIngress(event []byte) {
-}
-
 // issues an http put request to the Onix CMDB passing the specified item
+// - payload: the payload object
+// - resourceName: the WAPI resource name (e.g. item, itemtype, link, etc.)
 // returns the payload key and a success flag
 func (c *Client) putResource(payload Payload, resourceName string) (string, bool) {
-	result, err := c.Put(payload, resourceName)
+	// converts the passed-in payload to a JSON bytes reader
+	bytes, err := payload.ToJSON()
+
+	if err != nil {
+		c.Log.Errorf("Failed to marshall %s data: %s.", resourceName, err)
+		return "", false
+	}
+
+	// makes the http PUT request
+	result, err := c.makeRequest(PUT, resourceName, payload.KeyValue(), bytes)
 	if err != nil {
 		c.Log.Errorf("Failed to PUT %s: %s.", resourceName, err)
 		return "", false
@@ -265,76 +220,4 @@ func (c *Client) putResource(payload Payload, resourceName string) (string, bool
 	}
 	c.Log.Tracef("%s: %s, Onix reports nothing to update.", resourceName, payload.KeyValue())
 	return payload.KeyValue(), true
-}
-
-func (c *Client) getNamespaceItem(event []byte) (*Item, error) {
-	cluster := gjson.GetBytes(event, Cluster)
-	key := gjson.GetBytes(event, Key)
-	annot := gjson.GetBytes(event, Annotations).Map()
-	meta := gjson.GetBytes(event, MetaInfo)
-	created := gjson.GetBytes(event, Created)
-	item := &Item{
-		Key:         fmt.Sprintf("k8s:cluster:%s:ns:%s", cluster.String(), key.String()),
-		Name:        annot[Name].String(),
-		Description: annot[Description].String(),
-		Meta:        MAP{},
-		Attribute:   MAP{},
-		Type:        K8SNamespace,
-	}
-	item.Attribute["Requester"] = annot[Requester].String()
-	item.Attribute["Created"] = created.String()
-
-	err := json.Unmarshal([]byte(meta.String()), &item.Meta)
-	if err != nil {
-		c.Log.Errorf("Failed to unmarshal event metadata: %s.", err)
-		return nil, err
-	}
-	return item, nil
-}
-
-func (c *Client) getClusterItem(event []byte) *Item {
-	host := gjson.GetBytes(event, Cluster)
-	return &Item{
-		Key:         fmt.Sprintf("k8s:cluster:%s", host.String()),
-		Name:        fmt.Sprintf("%s Container Platform", strings.ToUpper(host.String())),
-		Description: "A Kubernetes Cluster instance.",
-		Type:        K8SCluster,
-	}
-}
-
-func (c *Client) getLink(startItem string, endItem string) Payload {
-	return &Link{
-		Key:          fmt.Sprintf("%s->%s", startItem, endItem),
-		StartItemKey: startItem,
-		EndItemKey:   endItem,
-		Type:         K8SLink,
-	}
-}
-
-func (c *Client) deleteNamespace(bytes []byte) {
-	panic("deleteNamespace() not implemented")
-}
-
-func (c *Client) deletePod(bytes []byte) {
-	panic("deletePod() not implemented")
-}
-
-func (c *Client) deleteService(bytes []byte) {
-	panic("deleteService() not implemented")
-}
-
-func (c *Client) deleteResourceQuota(bytes []byte) {
-	panic("deleteResourceQuota() not implemented")
-}
-
-func (c *Client) deletePersistentVolume(bytes []byte) {
-	panic("deletePersistentVolume() not implemented")
-}
-
-func (c *Client) deleteIngress(bytes []byte) {
-	panic("deleteIngress() not implemented")
-}
-
-func (c *Client) deleteReplicationController(bytes []byte) {
-	panic("deleteReplicationController() not implemented")
 }

@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"io"
@@ -49,6 +50,10 @@ func (c *Webhook) Start(client *Client) {
 
 	c.log.Tracef("Registering handler for web path /%s.", c.config.Path)
 	http.HandleFunc(fmt.Sprintf("/%s", c.config.Path), c.webhookHandler)
+
+	// prometheus metrics
+	c.log.Tracef("Registering handler for /metrics.")
+	http.Handle("/metrics", promhttp.Handler())
 
 	// runs the server asynchronously
 	go func() {
