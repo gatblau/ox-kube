@@ -15,34 +15,15 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/tidwall/gjson"
+	"strings"
 )
 
-const (
-	K8SModel                 = "KUBE"
-	K8SCluster               = "K8SCluster"
-	K8SNamespace             = "K8SNamespace"
-	K8SResourceQuota         = "K8SResourceQuota"
-	K8SPod                   = "K8SPod"
-	K8SService               = "K8SService"
-	K8SIngress               = "K8SIngress"
-	K8SReplicationController = "K8SReplicationController"
-	K8SPersistentVolume      = "K8SPersistentVolume"
-	K8SLink                  = "K8SLink"
-)
-
-// checks the kube model is defined in Onix
-func ModelExists(ox *Client) (bool, error) {
-	model, err := ox.Get("model", K8SModel)
-	if err != nil {
-		return false, err
-	}
-	return model != nil, nil
-}
-
-func CreateModel(c *Client) (*Result, error) {
-	// defines the kube meta model
-	modelData := &Data{
+// gets the kube meta-model for Onix
+func (c *Client) getModel() Payload {
+	return &Data{
 		Models: []Model{
 			Model{
 				Key:         K8SModel,
@@ -168,7 +149,105 @@ func CreateModel(c *Client) (*Result, error) {
 			},
 		},
 	}
-	// create the model
-	result, err := c.Put(modelData, "data")
-	return result, err
+}
+
+// generic link payload
+func (c *Client) getLink(startItem string, endItem string) Payload {
+	return &Link{
+		Key:          fmt.Sprintf("%s->%s", startItem, endItem),
+		StartItemKey: startItem,
+		EndItemKey:   endItem,
+		Type:         K8SLink,
+	}
+}
+
+// cluster item payload
+func (c *Client) getClusterItem(event []byte) *Item {
+	host := gjson.GetBytes(event, Cluster)
+	return &Item{
+		Key:         keyCluster(host.String()),
+		Name:        fmt.Sprintf("%s Container Platform", strings.ToUpper(host.String())),
+		Description: "A Kubernetes Cluster instance.",
+		Type:        K8SCluster,
+	}
+}
+
+// namespace item payload
+func (c *Client) getNamespaceItem(event []byte) (*Item, error) {
+	item, err := item(event, K8SNamespace, "ns")
+	if err != nil {
+		return nil, err
+	}
+	annot := gjson.GetBytes(event, Annotations).Map()
+	item.Attribute["Requester"] = annot[Annotation_Requester].String()
+	return item, nil
+}
+
+// pod item payload
+func (c *Client) getPodItem(event []byte) (*Item, error) {
+	item, err := item(event, K8SPod, "pod")
+	if err != nil {
+		return nil, err
+	}
+	annot := gjson.GetBytes(event, Annotations).Map()
+	item.Attribute["SCC"] = annot[Annotation_SCC].String()
+	item.Attribute["Generated_By"] = annot[Annotation_GeneratedBy].String()
+	return item, nil
+}
+
+// service item payload
+func (c *Client) getServiceItem(event []byte) (*Item, error) {
+	item, err := item(event, K8SService, "svc")
+	if err != nil {
+		return nil, err
+	}
+	selector := gjson.GetBytes(event, Selector).String()
+	annot := gjson.GetBytes(event, Annotations).Map()
+	item.Attribute["Generated_By"] = annot[Annotation_GeneratedBy].String()
+	item.Attribute["Selector"] = selector
+	return item, nil
+}
+
+// gets the unique key for a service
+func getKey(event []byte, oType string) string {
+	key := gjson.GetBytes(event, Key).String()
+	return fmt.Sprintf("%s:%s:%s", NS(event), oType, key)
+}
+
+func keyCluster(clusterKey string) string {
+	return fmt.Sprintf("k8s:%s", clusterKey)
+}
+
+// use to identify the namespace an object is in, in all but Namespace events
+func NS(event []byte) string {
+	cluster := gjson.GetBytes(event, Cluster).String()
+	namespace := gjson.GetBytes(event, Namespace).String()
+	if len(namespace) == 0 {
+		namespace = gjson.GetBytes(event, Key).String()
+	}
+	return fmt.Sprintf("%s:ns:%s", keyCluster(cluster), namespace)
+}
+
+func item(event []byte, iType string, oType string) (*Item, error) {
+	spec := gjson.GetBytes(event, SpecInfo)
+	created := gjson.GetBytes(event, Created)
+	var key string
+	if oType == "ns" {
+		// if the object is a namespace then do not repeat it in the key
+		key = NS(event)
+	} else {
+		key = getKey(event, oType)
+	}
+	item := &Item{
+		Key:       key,
+		Meta:      MAP{},
+		Attribute: MAP{},
+		Type:      iType,
+	}
+	item.Attribute["Created"] = created.String()
+	err := json.Unmarshal([]byte(spec.String()), &item.Meta)
+	if err != nil {
+		return nil, err
+	}
+	return item, nil
 }

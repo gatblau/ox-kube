@@ -40,7 +40,7 @@ func (k *OxKube) start() error {
 	}
 	// checks if a meta model for K8S is defined in Onix
 	k.log.Tracef("Checking if the KUBE meta-model is defined in Onix.")
-	exist, err := ModelExists(k.client)
+	exist, err := k.client.modelExists()
 	if err != nil {
 		k.log.Errorf("Failed to check if the KUBE meta-model exists in Onix: %s.", err)
 		return err
@@ -49,14 +49,9 @@ func (k *OxKube) start() error {
 	if !exist {
 		// creates a meta model
 		k.log.Tracef("The KUBE meta-model is not yet defined in Onix, proceeding to create it.")
-		result, err := CreateModel(k.client)
-		if err != nil {
-			k.log.Errorf("Failed to create the KUBE meta-model in Onix: %s.", err)
-			return err
-		}
-		if result.Error {
-			k.log.Errorf("Failed to create the KUBE meta-model in Onix: %s.", result.Message)
-		} else {
+		success := k.client.putModel()
+
+		if success {
 			k.log.Tracef("KUBE meta-model successfully created.")
 		}
 	} else {
