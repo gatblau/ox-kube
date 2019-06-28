@@ -35,6 +35,7 @@ build:
 
 # build the ox-kube docker image
 docker-image:
+	$(MAKE) docker-clean
 	docker build -t gatblau/$(BINARY_NAME):$(IMG_VER) .
 
 # deletes dangling images
