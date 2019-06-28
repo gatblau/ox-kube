@@ -51,9 +51,11 @@ func (c *Webhook) Start(client *Client) {
 	c.log.Tracef("Registering handler for web path /%s.", c.config.Path)
 	http.HandleFunc(fmt.Sprintf("/%s", c.config.Path), c.webhookHandler)
 
-	// prometheus metrics
-	c.log.Tracef("Registering handler for /metrics.")
-	http.Handle("/metrics", promhttp.Handler())
+	if c.config.Metrics {
+		// prometheus metrics
+		c.log.Tracef("Metrics is enabled, registering handler for endpoint /metrics.")
+		http.Handle("/metrics", promhttp.Handler())
+	}
 
 	// runs the server asynchronously
 	go func() {
@@ -87,12 +89,51 @@ func (c *Webhook) Start(client *Client) {
 
 func (c *Webhook) webhookHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+
+	// if basic auth enabled
+	if strings.ToLower(c.config.AuthMode) == "basic" {
+		if r.Header.Get("Authorization") == "" {
+			// if no authorisation header is passed, then it prompts a client browser to authenticate
+			w.Header().Set("WWW-Authenticate", `Basic realm="oxkube"`)
+			w.WriteHeader(http.StatusUnauthorized)
+			c.log.Tracef("Unauthorised request.")
+			return
+		} else {
+			// authenticate the request
+			requiredToken := NewBasicToken(c.config.Username, c.config.Password)
+			providedToken := r.Header.Get("Authorization")
+			// if the authentication fails
+			if !strings.Contains(providedToken, requiredToken) {
+				// returns an unauthorised request
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+		}
+	}
+
 	switch r.Method {
 	case "GET":
 		_, _ = io.WriteString(w, "OxKube webhook is ready.\n"+
 			"Use an HTTP POST to send events.")
 	case "POST":
-		c.process(w, r)
+		result, _ := c.process(w, r)
+		if result.Error {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(result.Message))
+			return
+		}
+		if result.Changed {
+			if result.Operation == "I" {
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte("created"))
+			} else if result.Operation == "U" {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte("updated"))
+			}
+		} else {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("nothing to update"))
+		}
 	}
 }
 
@@ -110,12 +151,14 @@ func (c *Webhook) rootHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (c *Webhook) process(w http.ResponseWriter, r *http.Request) error {
+func (c *Webhook) process(w http.ResponseWriter, r *http.Request) (*Result, error) {
+	var result *Result
+
 	// get the request data
 	event, err := c.getRequest(r)
 
 	if err != nil {
-		return err
+		return result, err
 	}
 	// get the kind of K8S object
 	chgKind := gjson.GetBytes(event, "Change.kind")
@@ -128,7 +171,7 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) error {
 		case "create":
 			fallthrough
 		case "update":
-			c.ox.putNamespace(event)
+			result, err = c.ox.putNamespace(event)
 		case "delete":
 			c.ox.deleteNamespace(event)
 		}
@@ -137,7 +180,7 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) error {
 		case "create":
 			fallthrough
 		case "update":
-			c.ox.putPod(event)
+			result, err = c.ox.putPod(event)
 		case "delete":
 			c.ox.deletePod(event)
 		}
@@ -146,7 +189,7 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) error {
 		case "create":
 			fallthrough
 		case "update":
-			c.ox.putService(event)
+			result, err = c.ox.putService(event)
 		case "delete":
 			c.ox.deleteService(event)
 		}
@@ -187,7 +230,7 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) error {
 			c.ox.deleteReplicationController(event)
 		}
 	}
-	return nil
+	return result, err
 }
 
 // unmarshal the http request into a json like structure

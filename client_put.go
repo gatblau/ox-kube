@@ -37,62 +37,70 @@ func (c *Client) modelExists() (bool, error) {
 }
 
 func (c *Client) putModel() bool {
-	_, success := c.putResource(c.getModel(), "data")
-	return success
+	_, result, _ := c.putResource(c.getModel(), "data")
+	return result.Error
 }
 
-func (c *Client) putNamespace(event []byte) {
+func (c *Client) putNamespace(event []byte) (*Result, error) {
 	// ensures the K8S cluster config item exists
-	clusterKey, success := c.putResource(c.getClusterItem(event), "item")
+	clusterKey, result, err := c.putResource(c.getClusterItem(event), "item")
 
-	if !success {
-		return
+	if result.Error {
+		return result, err
 	}
 
 	// gets the namespace item information
-	item, err := c.getNamespaceItem(event)
+	item, err := item(event, K8SNamespace, "ns")
 	if err != nil {
 		c.Log.Errorf("Failed to get Namespace information: %s", err)
-		return
+		return result, err
 	}
 	// push the item to the CMDB
-	namespaceKey, success := c.putResource(item, "item")
+	namespaceKey, result, err := c.putResource(item, "item")
 
-	if !success {
-		return
+	if result.Error {
+		return result, err
 	}
 
 	// push a link between items
-	c.putResource(c.getLink(clusterKey, namespaceKey), "link")
+	_, result, err = c.putResource(c.getLink(clusterKey, namespaceKey), "link")
+	return result, err
 }
 
-func (c *Client) putPod(event []byte) {
+func (c *Client) putPod(event []byte) (*Result, error) {
 	// gets the pod item information
-	item, err := c.getPodItem(event)
+	item, err := item(event, K8SPod, "pod")
 	if err != nil {
 		c.Log.Errorf("Failed to get POD information: %s.", err)
-		return
+		return nil, err
 	}
 	// push the item to the CMDB
-	podKey, success := c.putResource(item, "item")
+	podKey, result, err := c.putResource(item, "item")
 
-	if !success {
-		return
+	if result.Error {
+		return result, err
 	}
 
 	// ensure link between namespace and pod exist
-	c.putResource(c.getLink(NS(event), podKey), "link")
+	_, result, err = c.putResource(c.getLink(NS(event), podKey), "link")
+
+	// now link the pod with any matching services
+	// 1. query services in the namespace first: /item?type=K8SService&attrs=namespace,value
+	// 2. for each service query the selector: meta.selector => key, value
+	// 3. find pods with such selectors: item?type=K8SPod&attrs=selector_key,selector_value|namespace,value
+	return result, err
 }
 
-func (c *Client) putService(event []byte) {
+func (c *Client) putService(event []byte) (*Result, error) {
 	// gets the service item information
-	item, err := c.getServiceItem(event)
+	item, err := item(event, K8SService, "svc")
 	if err != nil {
 		c.Log.Errorf("Failed to get SERVICE information: %s.", err)
-		return
+		return nil, err
 	}
 	// push the item to the CMDB
-	c.putResource(item, "item")
+	_, result, err := c.putResource(item, "item")
+	return result, err
 }
 
 func (c *Client) putResourceQuota(event []byte) {

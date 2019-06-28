@@ -24,19 +24,13 @@ import (
 )
 
 const (
-	Key                    = "Object.metadata.name"
-	Annotation_Name        = "openshift.io/display-name"
-	Annotation_Description = "openshift.io/description"
-	Created                = "Object.metadata.creationTimestamp"
-	Annotation_Requester   = "openshift.io/requester"
-	ObjectInfo             = "Object"
-	SpecInfo               = "Object.spec"
-	Annotations            = "Object.metadata.annotations"
-	Cluster                = "Change.host"
-	Annotation_SCC         = "openshift.io/scc"
-	Annotation_GeneratedBy = "openshift.io/generated-by"
-	Namespace              = "Change.namespace"
-	Selector               = "Object.spec.selector"
+	Key         = "Object.metadata.name"
+	Created     = "Object.metadata.creationTimestamp"
+	SpecInfo    = "Object.spec"
+	Annotations = "Object.metadata.annotations"
+	Labels      = "Object.metadata.labels"
+	Cluster     = "Change.host"
+	Namespace   = "Object.metadata.namespace"
 )
 
 type Client struct {
@@ -195,29 +189,29 @@ func (c *Client) deleteResource(payload Payload, resourceName string, result int
 // - payload: the payload object
 // - resourceName: the WAPI resource name (e.g. item, itemtype, link, etc.)
 // returns the payload key and a success flag
-func (c *Client) putResource(payload Payload, resourceName string) (string, bool) {
+func (c *Client) putResource(payload Payload, resourceName string) (string, *Result, error) {
 	// converts the passed-in payload to a JSON bytes reader
 	bytes, err := payload.ToJSON()
 
 	if err != nil {
 		c.Log.Errorf("Failed to marshall %s data: %s.", resourceName, err)
-		return "", false
+		return "", nil, err
 	}
 
 	// makes the http PUT request
 	result, err := c.makeRequest(PUT, resourceName, payload.KeyValue(), bytes)
 	if err != nil {
 		c.Log.Errorf("Failed to PUT %s: %s.", resourceName, err)
-		return "", false
+		return "", nil, err
 	}
 	if result.Error {
 		c.Log.Errorf("Failed to PUT %s: %s.", resourceName, result.Message)
-		return "", false
+		return "", result, err
 	}
 	if result.Changed {
 		c.Log.Tracef("%s: %s successfully updated in Onix.", resourceName, payload.KeyValue())
-		return payload.KeyValue(), true
+		return payload.KeyValue(), result, err
 	}
 	c.Log.Tracef("%s: %s, Onix reports nothing to update.", resourceName, payload.KeyValue())
-	return payload.KeyValue(), true
+	return payload.KeyValue(), result, err
 }

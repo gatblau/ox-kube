@@ -61,6 +61,17 @@ func (c *Client) getModel() Payload {
 				Name:        "Service",
 				Description: "Exposes an application running on a set of Pods as a network service.",
 				Model:       K8SModel,
+				Filter: map[string]interface{}{
+					"filters": []interface{}{
+						map[string]interface{}{
+							"selector": []interface{}{
+								map[string]interface{}{
+									"default": "$.selector",
+								},
+							},
+						},
+					},
+				},
 			},
 			ItemType{
 				Key:  K8SIngress,
@@ -165,57 +176,59 @@ func (c *Client) getLink(startItem string, endItem string) Payload {
 func (c *Client) getClusterItem(event []byte) *Item {
 	host := gjson.GetBytes(event, Cluster)
 	return &Item{
-		Key:         keyCluster(host.String()),
+		Key:         clusterKey(host.String()),
 		Name:        fmt.Sprintf("%s Container Platform", strings.ToUpper(host.String())),
 		Description: "A Kubernetes Cluster instance.",
 		Type:        K8SCluster,
 	}
 }
 
-// namespace item payload
-func (c *Client) getNamespaceItem(event []byte) (*Item, error) {
-	item, err := item(event, K8SNamespace, "ns")
+func item(event []byte, iType string, oType string) (*Item, error) {
+	name := gjson.GetBytes(event, Key)
+	spec := gjson.GetBytes(event, SpecInfo)
+	created := gjson.GetBytes(event, Created)
+	namespace := gjson.GetBytes(event, Namespace)
+	var key string
+	if oType == "ns" {
+		// if the object is a namespace then do not repeat it in the key
+		key = NS(event)
+	} else {
+		key = itemKey(event, oType)
+	}
+	item := &Item{
+		Key:       key,
+		Name:      name.String(),
+		Meta:      MAP{},
+		Attribute: MAP{},
+		Type:      iType,
+	}
+	item.Attribute["namespace"] = namespace.String()
+	item.Attribute["created"] = created.String()
+	addMap(event, item, Labels)
+	addMap(event, item, Annotations)
+	err := json.Unmarshal([]byte(spec.String()), &item.Meta)
 	if err != nil {
 		return nil, err
 	}
-	annot := gjson.GetBytes(event, Annotations).Map()
-	item.Attribute["Requester"] = annot[Annotation_Requester].String()
 	return item, nil
 }
 
-// pod item payload
-func (c *Client) getPodItem(event []byte) (*Item, error) {
-	item, err := item(event, K8SPod, "pod")
-	if err != nil {
-		return nil, err
+// adds the content of a map in the event to the item attributes
+func addMap(event []byte, item *Item, path string) {
+	mapObj := gjson.GetBytes(event, path).Map()
+	for key, value := range mapObj {
+		item.Attribute[key] = value.String()
 	}
-	annot := gjson.GetBytes(event, Annotations).Map()
-	item.Attribute["SCC"] = annot[Annotation_SCC].String()
-	item.Attribute["Generated_By"] = annot[Annotation_GeneratedBy].String()
-	return item, nil
-}
-
-// service item payload
-func (c *Client) getServiceItem(event []byte) (*Item, error) {
-	item, err := item(event, K8SService, "svc")
-	if err != nil {
-		return nil, err
-	}
-	selector := gjson.GetBytes(event, Selector).String()
-	annot := gjson.GetBytes(event, Annotations).Map()
-	item.Attribute["Generated_By"] = annot[Annotation_GeneratedBy].String()
-	item.Attribute["Selector"] = selector
-	return item, nil
 }
 
 // gets the unique key for a service
-func getKey(event []byte, oType string) string {
+func itemKey(event []byte, oType string) string {
 	key := gjson.GetBytes(event, Key).String()
-	return fmt.Sprintf("%s:%s:%s", NS(event), oType, key)
+	return fmt.Sprintf("%s-%s-%s", NS(event), oType, key)
 }
 
-func keyCluster(clusterKey string) string {
-	return fmt.Sprintf("k8s:%s", clusterKey)
+func clusterKey(clusterKey string) string {
+	return fmt.Sprintf("k8s-%s", clusterKey)
 }
 
 // use to identify the namespace an object is in, in all but Namespace events
@@ -225,29 +238,5 @@ func NS(event []byte) string {
 	if len(namespace) == 0 {
 		namespace = gjson.GetBytes(event, Key).String()
 	}
-	return fmt.Sprintf("%s:ns:%s", keyCluster(cluster), namespace)
-}
-
-func item(event []byte, iType string, oType string) (*Item, error) {
-	spec := gjson.GetBytes(event, SpecInfo)
-	created := gjson.GetBytes(event, Created)
-	var key string
-	if oType == "ns" {
-		// if the object is a namespace then do not repeat it in the key
-		key = NS(event)
-	} else {
-		key = getKey(event, oType)
-	}
-	item := &Item{
-		Key:       key,
-		Meta:      MAP{},
-		Attribute: MAP{},
-		Type:      iType,
-	}
-	item.Attribute["Created"] = created.String()
-	err := json.Unmarshal([]byte(spec.String()), &item.Meta)
-	if err != nil {
-		return nil, err
-	}
-	return item, nil
+	return fmt.Sprintf("%s-ns-%s", clusterKey(cluster), namespace)
 }

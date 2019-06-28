@@ -1,6 +1,11 @@
-# the indtance Id for logging identification purposes
+# the K8S cluster instance Id for logging identification purposes
 Id = "OxKube-01"
+
+# verbosity of logging (Trace, Debug, Warning, Info, Error, Fatal, Panic)
 LogLevel = "Trace"
+
+# enables metrics
+Metrics = "true"
 
 # CMDB endpoint to update
 [Onix]
@@ -19,8 +24,16 @@ LogLevel = "Trace"
 
     # webhook consumer details
     [Consumers.Webhook]
+        # the port used by the webhook endpoint
         Port = "8000"
+
+        # the web path of the webhook endpoint
         Path = "webhook"
+
+        # credentials for authenticating webhook endpoint clients
+        AuthMode = "basic" # none or basic
+        Username = "admin"
+        Password = "kub3"
 
     # broker consumer details
     [Consumers.Broker]
