@@ -19,8 +19,8 @@ BINARY_NAME=oxkube
 # the name of the go command to use to build the binary
 GO_CMD = go
 
-# the version of the container image to build
-IMG_VER = v0.0.1
+# the version of the application
+APP_VER = v0.0.1
 
 # the name of the folder where the packaged binaries will be placed after the build
 BUILD_FOLDER=build
@@ -33,12 +33,21 @@ build:
 	$(GO_CMD) fmt
 	export GOROOT=/usr/local/go; export GOPATH=$HOME/go; $(GO_CMD) build -o $(BINARY_NAME) -v
 
+# produce a new version tag
+version:
+	sh version.sh $(APP_VER)
+
 # build the ox-kube docker image
 docker-image:
-	$(MAKE) docker-clean
-	docker build -t gatblau/$(BINARY_NAME):$(IMG_VER) .
+	$(MAKE) version
+	docker build -t gatblau/$(BINARY_NAME)-snapshot:$(shell cat version) .
+	docker tag gatblau/$(BINARY_NAME)-snapshot:$(shell cat version) gatblau/$(BINARY_NAME)-snapshot:latest
 
-# deletes dangling images
+docker-push:
+	docker push gatblau/$(BINARY_NAME)-snapshot:$(shell cat version)
+	docker push gatblau/$(BINARY_NAME)-snapshot:latest
+
+# deletes dangling
 docker-clean:
 	docker rmi $(DANGLING_IMS)
 
