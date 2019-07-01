@@ -14,7 +14,10 @@
 */
 package main
 
-import "errors"
+import (
+	"bytes"
+	"errors"
+)
 
 // Result data retrieved by PUT and DELETE WAPI resources
 type Result struct {
@@ -23,6 +26,14 @@ type Result struct {
 	Message   string `json:"message"`
 	Operation string `json:"operation"`
 	Ref       string `json:"ref"`
+}
+
+type ResultList struct {
+	Values []Item
+}
+
+func (list *ResultList) ToJSON() (*bytes.Reader, error) {
+	return GetJSONBytesReader(list)
 }
 
 // Check for errors in the result and the passed in error

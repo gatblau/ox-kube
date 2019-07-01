@@ -13,6 +13,9 @@
 #    to be licensed under the same terms as the rest of the code.
 #
 
+# the name of the container registry repository
+REPO_NAME=gatblau
+
 # the name of the ox-kube binary file
 BINARY_NAME=oxkube
 
@@ -40,12 +43,12 @@ version:
 # build the ox-kube docker image
 docker-image:
 	$(MAKE) version
-	docker build -t gatblau/$(BINARY_NAME)-snapshot:$(shell cat version) .
-	docker tag gatblau/$(BINARY_NAME)-snapshot:$(shell cat version) gatblau/$(BINARY_NAME)-snapshot:latest
+	docker build -t $(REPO_NAME)/$(BINARY_NAME)-snapshot:$(shell cat version) .
+	docker tag $(REPO_NAME)/$(BINARY_NAME)-snapshot:$(shell cat version) $(REPO_NAME)/$(BINARY_NAME)-snapshot:latest
 
 docker-push:
-	docker push gatblau/$(BINARY_NAME)-snapshot:$(shell cat version)
-	docker push gatblau/$(BINARY_NAME)-snapshot:latest
+	docker push $(REPO_NAME)/$(BINARY_NAME)-snapshot:$(shell cat version)
+	docker push $(REPO_NAME)/$(BINARY_NAME)-snapshot:latest
 
 # deletes dangling
 docker-clean:
