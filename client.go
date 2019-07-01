@@ -21,6 +21,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 const (
@@ -128,8 +129,27 @@ func (c *Client) makeRequest(method string, resourceName string, key string, pay
 }
 
 // makes a GET HTTP request to the WAPI
-func (c *Client) getResource(resourceName string, key string) (interface{}, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s/%s/%s", c.Config.Onix.URL, resourceName, key), nil)
+func (c *Client) getResource(resourceName string, key string, filter map[string]string) (interface{}, error) {
+	var (
+		req *http.Request
+		err error
+	)
+	if len(key) > 0 {
+		// if a resource key is passed, then query such resource
+		req, err = http.NewRequest("GET", fmt.Sprintf("%s/%s/%s", c.Config.Onix.URL, resourceName, key), nil)
+	} else {
+		// otherwise issue a find query with params (filters)
+		req, err = http.NewRequest("GET", fmt.Sprintf("%s/%s", c.Config.Onix.URL, resourceName), nil)
+		// if there are query string params
+		if filter != nil {
+			// adds them to the request
+			qParams := url.Values{}
+			for k, v := range filter {
+				qParams.Add(k, v)
+			}
+			req.URL.RawQuery = qParams.Encode()
+		}
+	}
 	req.Header.Set("Content-Type", "application/json")
 	// only add authorisation header if there is a token
 	if len(c.Token) > 0 {
@@ -148,6 +168,14 @@ func (c *Client) getResource(resourceName string, key string) (interface{}, erro
 	}
 	// if the response status is OK (200)
 	if resp.StatusCode == 200 {
+		// if no key was passed-in, then assumes a query
+		if len(key) == 0 {
+			result := new(ResultList)
+			err = json.NewDecoder(resp.Body).Decode(result)
+			return result, err
+		}
+
+		// we have a key
 		switch {
 		case resourceName == "item":
 			result := new(Item)
@@ -176,6 +204,11 @@ func (c *Client) getResource(resourceName string, key string) (interface{}, erro
 		return nil, errors.New(resp.Status)
 	}
 	// the model was not found
+	return nil, nil
+}
+
+func (c *Client) findItems() (interface{}, error) {
+
 	return nil, nil
 }
 

@@ -102,3 +102,7 @@ func GetJSONBytesReader(data interface{}) (*bytes.Reader, error) {
 	jsonBytes, err := json.Marshal(data)
 	return bytes.NewReader(jsonBytes), err
 }
+
+func check(result *Result, err error) bool {
+	return err != nil || (result != nil && result.Error)
+}

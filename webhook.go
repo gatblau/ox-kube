@@ -116,10 +116,18 @@ func (c *Webhook) webhookHandler(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "OxKube webhook is ready.\n"+
 			"Use an HTTP POST to send events.")
 	case "POST":
-		result, _ := c.process(w, r)
+		result, err := c.process(w, r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			msg := fmt.Sprintf("Error whilst processing request: %s", err)
+			w.Write([]byte(msg))
+			c.log.Error(msg)
+			return
+		}
 		if result.Error {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(result.Message))
+			c.log.Errorf("Error whilst processing request: %s", result.Message)
 			return
 		}
 		if result.Changed {
@@ -178,56 +186,56 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) (*Result, erro
 	case "pod":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
-			fallthrough
-		case "update":
 			result, err = c.ox.putPod(event)
+		case "update":
+			// do nothing for now
 		case "delete":
 			c.ox.deletePod(event)
 		}
 	case "service":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
-			fallthrough
-		case "update":
 			result, err = c.ox.putService(event)
+		case "update":
+			// do nothing for now
 		case "delete":
 			c.ox.deleteService(event)
 		}
-	case "resourcequota":
+	case "persistent_volume":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
-			fallthrough
+			result, err = c.ox.putPersistentVolume(event)
 		case "update":
-			c.ox.putResourceQuota(event)
-		case "delete":
-			c.ox.deleteResourceQuota(event)
-		}
-	case "persistenvolume":
-		switch strings.ToLower(chgType.String()) {
-		case "create":
-			fallthrough
-		case "update":
-			c.ox.putPersistentVolume(event)
+			// do nothing for now
 		case "delete":
 			c.ox.deletePersistentVolume(event)
+		}
+	case "replication_controller":
+		switch strings.ToLower(chgType.String()) {
+		case "create":
+			result, err = c.ox.putReplicationController(event)
+		case "update":
+			// do nothing for now
+		case "delete":
+			c.ox.deleteReplicationController(event)
 		}
 	case "ingress":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
 			fallthrough
 		case "update":
-			c.ox.putIngress(event)
+			fallthrough
 		case "delete":
-			c.ox.deleteIngress(event)
+			c.log.Trace("ingress recording not implemented")
 		}
-	case "replicationcontroller":
+	case "resourcequota":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
 			fallthrough
 		case "update":
-			c.ox.putReplicationController(event)
+			fallthrough
 		case "delete":
-			c.ox.deleteReplicationController(event)
+			c.log.Trace("resource quota recording not implemented")
 		}
 	}
 	return result, err
