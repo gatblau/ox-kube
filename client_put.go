@@ -108,7 +108,7 @@ func (c *Client) putService(event []byte) (*Result, error) {
 	_, result, err := c.putResource(item, "item")
 
 	// check if there are pods that should be linked to this service
-	_, _ = c.linkObjectToPods(item)
+	_, _ = c.linkK8SObjectToPods(item)
 
 	return result, err
 }
@@ -124,7 +124,7 @@ func (c *Client) putReplicationController(event []byte) (*Result, error) {
 	_, result, err := c.putResource(item, "item")
 
 	// check if there are pods that should be linked to this replication controller
-	_, _ = c.linkObjectToPods(item)
+	_, _ = c.linkK8SObjectToPods(item)
 
 	return result, err
 }
@@ -185,7 +185,7 @@ func (c *Client) linkPodToK8SObject(itemType string, pod *Item) (*Result, error)
 
 // link the passed-in K8S object with any existing pods in the namespace
 // by matching the pods labels with the object selectors
-func (c *Client) linkObjectToPods(k8sObj *Item) (*Result, error) {
+func (c *Client) linkK8SObjectToPods(k8sObj *Item) (*Result, error) {
 	// now link the pod with any matching services
 	filters := map[string]string{
 		"type":  K8SPod,
