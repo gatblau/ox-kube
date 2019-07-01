@@ -89,10 +89,10 @@ func (c *Client) putPod(event []byte) (*Result, error) {
 	_, result, err = c.putResource(c.getLink(NS(event), podKey), "link")
 
 	// link the pod with services
-	_, _ = c.linkPodToOtherObjects(K8SService, pod)
+	_, _ = c.linkPodToK8SObject(K8SService, pod)
 
 	// link the pod with replication controllers
-	_, _ = c.linkPodToOtherObjects(K8SReplicationController, pod)
+	_, _ = c.linkPodToK8SObject(K8SReplicationController, pod)
 
 	return result, err
 }
@@ -150,7 +150,7 @@ func (c *Client) putIngress(event []byte) {
 
 // link the passed in pod with any K8S objects in the namespace
 // by matching the objects selectors with the pod labels
-func (c *Client) linkPodToOtherObjects(itemType string, pod *Item) (*Result, error) {
+func (c *Client) linkPodToK8SObject(itemType string, pod *Item) (*Result, error) {
 	// now link the pod with any matching services
 	filters := map[string]string{
 		"type":  itemType,
