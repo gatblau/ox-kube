@@ -207,15 +207,10 @@ func (c *Client) getResource(resourceName string, key string, filter map[string]
 	return nil, nil
 }
 
-func (c *Client) findItems() (interface{}, error) {
-
-	return nil, nil
-}
-
 // makes a DELETE HTTP request to the WAPI
-func (c *Client) deleteResource(payload Payload, resourceName string, result interface{}) (*Result, error) {
+func (c *Client) deleteResource(resourceName string, resourceKey string) (*Result, error) {
 	// make an http put request to the service
-	return c.makeRequest(DELETE, resourceName, payload.KeyValue(), nil)
+	return c.makeRequest(DELETE, resourceName, resourceKey, nil)
 }
 
 // issues an http put request to the Onix CMDB passing the specified item

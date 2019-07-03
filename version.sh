@@ -2,7 +2,7 @@
 
 VERSION=$1
 if [ $# -eq 0 ]; then
-    echo "An image version is required for Onix. Provide it as a parameter."
+    echo "An image version is required for Onix Kube. Provide it as a parameter."
     echo "Usage is: sh build.sh [APP VERSION] - e.g. sh build.sh v1.0.0"
     exit 1
 fi

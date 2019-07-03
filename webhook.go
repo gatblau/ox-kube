@@ -201,10 +201,10 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) (*Result, erro
 		case "delete":
 			c.ox.deleteService(event)
 		}
-	case "persistent_volume":
+	case "persistent_volume_claim":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
-			result, err = c.ox.putPersistentVolume(event)
+			result, err = c.ox.putPersistentVolumeClaim(event)
 		case "update":
 			// do nothing for now
 		case "delete":
@@ -233,9 +233,9 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) (*Result, erro
 		case "create":
 			fallthrough
 		case "update":
-			fallthrough
+			result, err = c.ox.putResourceQuota(event)
 		case "delete":
-			c.log.Trace("resource quota recording not implemented")
+			c.log.Trace("resource quota deletion not implemented")
 		}
 	}
 	return result, err

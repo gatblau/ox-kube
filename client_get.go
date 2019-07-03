@@ -14,30 +14,20 @@
 */
 package main
 
-func (c *Client) deleteNamespace(bytes []byte) {
-	c.deleteResource()
-}
+import "fmt"
 
-func (c *Client) deletePod(bytes []byte) {
-	panic("deletePod() not implemented")
-}
+// get all K8S objects of a specific type in the specified cluster namespace
+func (c *Client) getObjectsInNamespace(cluster string, namespace string, objType K8SOBJ) ([]Item, error) {
+	filters := map[string]string{
+		"type":  objType.String(),
+		"attrs": fmt.Sprintf("cluster,%s|namespace,%s", cluster, namespace),
+	}
+	// get pods in the namespace first
+	podsObj, err := c.getResource("item", "", filters)
 
-func (c *Client) deleteService(bytes []byte) {
-	panic("deleteService() not implemented")
-}
-
-func (c *Client) deleteResourceQuota(bytes []byte) {
-	panic("deleteResourceQuota() not implemented")
-}
-
-func (c *Client) deletePersistentVolume(bytes []byte) {
-	panic("deletePersistentVolume() not implemented")
-}
-
-func (c *Client) deleteIngress(bytes []byte) {
-	panic("deleteIngress() not implemented")
-}
-
-func (c *Client) deleteReplicationController(bytes []byte) {
-	panic("deleteReplicationController() not implemented")
+	if err != nil {
+		return nil, err
+	}
+	// unwraps the response into a list of pod items
+	return podsObj.(*ResultList).Values, nil
 }

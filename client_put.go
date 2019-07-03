@@ -14,22 +14,26 @@
 */
 package main
 
-import (
-	"fmt"
+const (
+	K8SModel                 = "K8S"
+	K8SCluster               = "K8S_CL"
+	K8SNamespace             = "K8S_NS"
+	K8SResourceQuota         = "K8S_RQ"
+	K8SPod                   = "K8S_POD"
+	K8SService               = "K8S_SVC"
+	K8SIngress               = "K8S_INGRESS"
+	K8SReplicationController = "K8S_RC"
+	K8SPersistentVolumeClaim = "K8S_PVC"
+	K8SLink                  = "K8S_LINK"
 )
 
-const (
-	K8SModel                 = "KUBE"
-	K8SCluster               = "K8SCluster"
-	K8SNamespace             = "K8SNamespace"
-	K8SResourceQuota         = "K8SResourceQuota"
-	K8SPod                   = "K8SPod"
-	K8SService               = "K8SService"
-	K8SIngress               = "K8SIngress"
-	K8SReplicationController = "K8SReplicationController"
-	K8SPersistentVolume      = "K8SPersistentVolume"
-	K8SLink                  = "K8SLink"
-)
+// a type for the above constants
+type K8SOBJ string
+
+// convert above type to string
+func (t K8SOBJ) String() string {
+	return string(t)
+}
 
 // checks the kube model is defined in Onix
 func (c *Client) modelExists() (bool, error) {
@@ -40,9 +44,9 @@ func (c *Client) modelExists() (bool, error) {
 	return model != nil, nil
 }
 
-func (c *Client) putModel() bool {
+func (c *Client) putModel() *Result {
 	_, result, _ := c.putResource(c.getModel(), "data")
-	return result.Error
+	return result
 }
 
 func (c *Client) putNamespace(event []byte) (*Result, error) {
@@ -94,6 +98,9 @@ func (c *Client) putPod(event []byte) (*Result, error) {
 	// link the pod with replication controllers
 	_, _ = c.linkPodToK8SObject(K8SReplicationController, pod)
 
+	// link the pod with any existing PVCs
+	_, _ = c.linkPodToPVCs(pod)
+
 	return result, err
 }
 
@@ -129,11 +136,11 @@ func (c *Client) putReplicationController(event []byte) (*Result, error) {
 	return result, err
 }
 
-func (c *Client) putPersistentVolume(event []byte) (*Result, error) {
+func (c *Client) putPersistentVolumeClaim(event []byte) (*Result, error) {
 	// gets the persistent volume item information
-	item, err := item(event, K8SPersistentVolume, "pv")
+	item, err := item(event, K8SPersistentVolumeClaim, "pvc")
 	if err != nil {
-		c.Log.Errorf("Failed to get PERSISTENT VOLUME information: %s.", err)
+		c.Log.Errorf("Failed to get PERSISTENT VOLUME CLAIM information: %s.", err)
 		return nil, err
 	}
 	// push the volume to the CMDB
@@ -142,28 +149,40 @@ func (c *Client) putPersistentVolume(event []byte) (*Result, error) {
 	return result, err
 }
 
-func (c *Client) putResourceQuota(event []byte) {
+func (c *Client) putResourceQuota(event []byte) (*Result, error) {
+	// gets the resource quota item information
+	item, err := item(event, K8SResourceQuota, "rq")
+	if err != nil {
+		c.Log.Errorf("Failed to get RESOURCE QUOTA information: %s.", err)
+		return nil, err
+	}
+	// push the volume to the CMDB
+	quotaKey, result, err := c.putResource(item, "item")
+
+	// ensure link between namespace and quota exist
+	_, result, err = c.putResource(c.getLink(NS(event), quotaKey), "link")
+
+	return result, err
 }
 
-func (c *Client) putIngress(event []byte) {
+func (c *Client) putIngress(event []byte) (*Result, error) {
+	panic("not implemented")
 }
 
 // link the passed in pod with any K8S objects in the namespace
 // by matching the objects selectors with the pod labels
-func (c *Client) linkPodToK8SObject(itemType string, pod *Item) (*Result, error) {
+func (c *Client) linkPodToK8SObject(objType K8SOBJ, pod *Item) (*Result, error) {
 	// now link the pod with any matching services
-	filters := map[string]string{
-		"type":  itemType,
-		"attrs": fmt.Sprintf("namespace,%s", pod.Attribute["namespace"].(string)),
-	}
 	// query services in the namespace first: /item?type=K8SService&attrs=namespace,value
-	objects, err := c.getResource("item", "", filters)
+	k8sObjs, err := c.getObjectsInNamespace(
+		pod.Attribute["cluster"].(string),
+		pod.Attribute["namespace"].(string),
+		objType)
 
 	if err != nil {
 		return nil, err
 	}
-	// unwraps the response into a list of service items
-	k8sObjs := objects.(*ResultList).Values
+
 	for _, k8sObj := range k8sObjs {
 		// for each k8s object check if the selectors match the pod labels
 		if selector, ok := k8sObj.Meta["selector"]; ok {
@@ -186,19 +205,15 @@ func (c *Client) linkPodToK8SObject(itemType string, pod *Item) (*Result, error)
 // link the passed-in K8S object with any existing pods in the namespace
 // by matching the pods labels with the object selectors
 func (c *Client) linkK8SObjectToPods(k8sObj *Item) (*Result, error) {
-	// now link the pod with any matching services
-	filters := map[string]string{
-		"type":  K8SPod,
-		"attrs": fmt.Sprintf("namespace,%s", k8sObj.Attribute["namespace"].(string)),
-	}
-	// get pods in the namespace first
-	podsObj, err := c.getResource("item", "", filters)
+	pods, err := c.getObjectsInNamespace(
+		k8sObj.Attribute["cluster"].(string),
+		k8sObj.Attribute["namespace"].(string),
+		K8SPod)
 
 	if err != nil {
 		return nil, err
 	}
-	// unwraps the response into a list of pod items
-	pods := podsObj.(*ResultList).Values
+
 	for _, pod := range pods {
 		if selector, ok := k8sObj.Meta["selector"]; ok {
 			selectors := selector.(map[string]interface{})
@@ -218,15 +233,29 @@ func (c *Client) linkK8SObjectToPods(k8sObj *Item) (*Result, error) {
 }
 
 // link the passed-in pod to any persistent volume via pod's PVCs
-func (c *Client) linkPodToPvs(pod *Item) (*Result, error) {
+func (c *Client) linkPodToPVCs(pod *Item) (*Result, error) {
+	pvcs, err := c.getObjectsInNamespace(
+		pod.Attribute["cluster"].(string),
+		pod.Attribute["namespace"].(string),
+		K8SPersistentVolumeClaim)
+
+	if err != nil {
+		return nil, err
+	}
+
 	if volume, ok := pod.Meta["volumes"]; ok {
-		volumes := volume.([]map[string]interface{})
+		volumes := volume.([]interface{})
 		for _, volumeMap := range volumes {
-			for k, v := range volumeMap {
+			for k, v := range volumeMap.(map[string]interface{}) {
 				if k == "persistentVolumeClaim" {
 					pvc := v.(map[string]interface{})
 					claim := pvc["claimName"]
-					c.Log.Tracef("Found PVC %s", claim)
+					// check if any of the PVCs can be linked to the pod
+					for _, pvc := range pvcs {
+						if pvc.Name == claim {
+							_, _, _ = c.putResource(c.getLink(pod.Key, pvc.Key), "link")
+						}
+					}
 				}
 			}
 		}
