@@ -15,7 +15,6 @@
 package main
 
 func (c *Client) deleteNamespace(bytes []byte) {
-	c.deleteResource()
 }
 
 func (c *Client) deletePod(bytes []byte) {
