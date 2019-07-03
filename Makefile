@@ -41,17 +41,17 @@ version:
 	sh version.sh $(APP_VER)
 
 # build the ox-kube docker image
-docker-image:
+image:
 	$(MAKE) version
-	docker build -t $(REPO_NAME)/$(BINARY_NAME)-snapshot:$(shell cat version) .
-	docker tag $(REPO_NAME)/$(BINARY_NAME)-snapshot:$(shell cat version) $(REPO_NAME)/$(BINARY_NAME)-snapshot:latest
+	docker build -t $(REPO_NAME)/$(BINARY_NAME)-snapshot:$(shell cat ./version) .
+	docker tag $(REPO_NAME)/$(BINARY_NAME)-snapshot:$(shell cat ./version) $(REPO_NAME)/$(BINARY_NAME)-snapshot:latest
 
-docker-push:
-	docker push $(REPO_NAME)/$(BINARY_NAME)-snapshot:$(shell cat version)
+push:
+	docker push $(REPO_NAME)/$(BINARY_NAME)-snapshot:$(shell cat ./version)
 	docker push $(REPO_NAME)/$(BINARY_NAME)-snapshot:latest
 
 # deletes dangling
-docker-clean:
+clean:
 	docker rmi $(DANGLING_IMS)
 
 # package the terraform provider for all platforms

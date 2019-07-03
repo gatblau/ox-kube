@@ -15,9 +15,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/sirupsen/logrus"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type OxKube struct {
@@ -40,19 +43,35 @@ func (k *OxKube) start() error {
 	}
 	// checks if a meta model for K8S is defined in Onix
 	k.log.Tracef("Checking if the KUBE meta-model is defined in Onix.")
-	exist, err := k.client.modelExists()
-	if err != nil {
-		k.log.Errorf("Failed to check if the KUBE meta-model exists in Onix: %s.", err)
-		return err
+	var (
+		exist    bool
+		attempts int
+		interval time.Duration = 30 // the interval to wait for reconnection
+	)
+	for {
+		exist, err = k.client.modelExists()
+		if err == nil {
+			break
+		}
+		if strings.Contains(err.Error(), "500") {
+			// there is a CMDB error so exit
+			k.log.Errorf("Can't connect to Onix: %s.", err)
+			return err
+		} else {
+			attempts = attempts + 1
+			k.log.Warnf("Can't connect to Onix: %s. "+
+				"Attempt %s, waiting before attempting to connect again.", err, strconv.Itoa(attempts))
+			time.Sleep(interval * time.Second)
+		}
 	}
 	// if not...
 	if !exist {
 		// creates a meta model
 		k.log.Tracef("The KUBE meta-model is not yet defined in Onix, proceeding to create it.")
-		success := k.client.putModel()
-
-		if success {
-			k.log.Tracef("KUBE meta-model successfully created.")
+		result := k.client.putModel()
+		if result.Error {
+			k.log.Errorf("Can't create KUBE meta-model: %s", result.Message)
+			return errors.New(result.Message)
 		}
 	} else {
 		k.log.Tracef("KUBE meta-model found in Onix.")

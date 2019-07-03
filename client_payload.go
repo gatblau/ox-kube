@@ -87,9 +87,9 @@ func (c *Client) getModel() Payload {
 				Model:       K8SModel,
 			},
 			ItemType{
-				Key:         K8SPersistentVolume,
-				Name:        "Persistent Volume",
-				Description: "A piece of storage in the cluster against which, claims can be made by pods.",
+				Key:         K8SPersistentVolumeClaim,
+				Name:        "Persistent Volume Claim",
+				Description: "A claim to a piece of storage in the cluster made by a pod.",
 				Model:       K8SModel,
 			},
 		},
@@ -127,12 +127,12 @@ func (c *Client) getModel() Payload {
 				EndItemTypeKey:   K8SPod,
 			},
 			LinkRule{
-				Key:              fmt.Sprintf("%s->%s", K8SPod, K8SPersistentVolume),
-				Name:             "K8S Pod to Persistent Volume Rule",
-				Description:      "A pod uses one or more persistent volumes.",
+				Key:              fmt.Sprintf("%s->%s", K8SPod, K8SPersistentVolumeClaim),
+				Name:             "K8S Pod to Persistent Volume Claim Rule",
+				Description:      "A pod makes one or more persistent volume claims.",
 				LinkTypeKey:      K8SLink,
 				StartItemTypeKey: K8SPod,
-				EndItemTypeKey:   K8SPersistentVolume,
+				EndItemTypeKey:   K8SPersistentVolumeClaim,
 			},
 			LinkRule{
 				Key:              fmt.Sprintf("%s->%s", K8SPod, K8SReplicationController),
@@ -184,6 +184,7 @@ func (c *Client) getClusterItem(event []byte) *Item {
 }
 
 func item(event []byte, iType string, oType string) (*Item, error) {
+	cluster := gjson.GetBytes(event, Cluster)
 	name := gjson.GetBytes(event, Key)
 	spec := gjson.GetBytes(event, SpecInfo)
 	created := gjson.GetBytes(event, Created)
@@ -202,6 +203,7 @@ func item(event []byte, iType string, oType string) (*Item, error) {
 		Attribute: MAP{},
 		Type:      iType,
 	}
+	item.Attribute["cluster"] = cluster.String()
 	item.Attribute["namespace"] = namespace.String()
 	item.Attribute["created"] = created.String()
 	addMap(event, item, Labels)
