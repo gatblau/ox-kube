@@ -34,6 +34,7 @@ type Webhook struct {
 	log    *logrus.Entry
 	config WebhookConf
 	ox     *Client
+	ready  bool
 }
 
 // launch a webhook on a TCP port listening for events
@@ -41,21 +42,29 @@ func (c *Webhook) Start(client *Client) {
 	// set the ox client
 	c.ox = client
 
-	// creates an http server listening on the specified TCP port
-	server := &http.Server{Addr: fmt.Sprintf(":%s", c.config.Port), Handler: nil}
+	// for security reasons, avoid using the DefaultServeMux
+	// and instead use a locally-scoped ServeMux
+	mux := http.NewServeMux()
 
 	// registers web handlers
-	c.log.Tracef("Registering handler for web root /")
-	http.HandleFunc("/", c.rootHandler)
+	c.log.Tracef("Registering web root / and livelyness probe /live handlers")
+	mux.HandleFunc("/", c.rootHandler)
+	mux.HandleFunc("/live", c.rootHandler)
+
+	c.log.Tracef("Registering readyness probe handler /ready")
+	mux.HandleFunc("/ready", c.readyHandler)
 
 	c.log.Tracef("Registering handler for web path /%s.", c.config.Path)
-	http.HandleFunc(fmt.Sprintf("/%s", c.config.Path), c.webhookHandler)
+	mux.HandleFunc(c.config.Path, c.webhookHandler)
 
 	if c.config.Metrics {
 		// prometheus metrics
 		c.log.Tracef("Metrics is enabled, registering handler for endpoint /metrics.")
 		http.Handle("/metrics", promhttp.Handler())
 	}
+
+	// creates an http server listening on the specified TCP port
+	server := &http.Server{Addr: fmt.Sprintf(":%s", c.config.Port), Handler: mux}
 
 	// runs the server asynchronously
 	go func() {
@@ -87,8 +96,32 @@ func (c *Webhook) Start(client *Client) {
 	}
 }
 
+func (c *Webhook) readyHandler(w http.ResponseWriter, r *http.Request) {
+	if !c.ready {
+		c.log.Warnf("Webhook is not ready")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, err := w.Write([]byte("Webhook is not ready"))
+		if err != nil {
+			c.log.Error(err)
+		}
+	} else {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("OK"))
+	}
+}
+
 func (c *Webhook) webhookHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
+
+	// get the request data
+	event, err := c.readRequestBody(r)
+
+	if err != nil {
+		c.log.Errorf("failed to get request data: %s", err)
+		return
+	}
+
+	c.log.Tracef("request: %s", event)
 
 	// if basic auth enabled
 	if strings.ToLower(c.config.AuthMode) == "basic" {
@@ -113,20 +146,29 @@ func (c *Webhook) webhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		_, _ = io.WriteString(w, "OxKube webhook is ready.\n"+
-			"Use an HTTP POST to send events.")
+		_, _ = io.WriteString(w, "OxKube webhook is ready: use an HTTP POST to send events.")
+	case "PUT":
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = io.WriteString(w, "OxKube webhook only supports HTTP POST to send events.")
 	case "POST":
-		result, err := c.process(w, r)
+		fallthrough
+	case "DELETE":
+		result, err := c.process(event)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			msg := fmt.Sprintf("Error whilst processing request: %s", err)
-			w.Write([]byte(msg))
+			_, _ = w.Write([]byte(msg))
 			c.log.Error(msg)
+			return
+		}
+		// protective code instead process does not return a result
+		if result == nil {
+			c.log.Error("No result whilst processing request to %s with payload %s", r.URL.Path, r.Body)
 			return
 		}
 		if result.Error {
 			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(result.Message))
+			_, _ = w.Write([]byte(result.Message))
 			c.log.Errorf("Error whilst processing request: %s", result.Message)
 			return
 		}
@@ -159,15 +201,7 @@ func (c *Webhook) rootHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (c *Webhook) process(w http.ResponseWriter, r *http.Request) (*Result, error) {
-	var result *Result
-
-	// get the request data
-	event, err := c.getRequest(r)
-
-	if err != nil {
-		return result, err
-	}
+func (c *Webhook) process(event []byte) (*Result, error) {
 	// get the kind of K8S object
 	chgKind := gjson.GetBytes(event, "Change.kind")
 	// get the type of change
@@ -179,45 +213,45 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) (*Result, erro
 		case "create":
 			fallthrough
 		case "update":
-			result, err = c.ox.putNamespace(event)
+			return c.ox.putNamespace(event)
 		case "delete":
-			c.ox.deleteNamespace(event)
+			return c.ox.deleteResource("item", NS(event))
 		}
 	case "pod":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
-			result, err = c.ox.putPod(event)
+			fallthrough
 		case "update":
-			// do nothing for now
+			return c.ox.putPod(event)
 		case "delete":
-			c.ox.deletePod(event)
+			return c.ox.deleteResource("item", itemKey(event, PodNameTag))
 		}
 	case "service":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
-			result, err = c.ox.putService(event)
+			fallthrough
 		case "update":
-			// do nothing for now
+			return c.ox.putService(event)
 		case "delete":
-			c.ox.deleteService(event)
+			return c.ox.deleteResource("item", itemKey(event, ServiceNameTag))
 		}
 	case "persistent_volume_claim":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
-			result, err = c.ox.putPersistentVolumeClaim(event)
+			fallthrough
 		case "update":
-			// do nothing for now
+			return c.ox.putPersistentVolumeClaim(event)
 		case "delete":
-			c.ox.deletePersistentVolume(event)
+			return c.ox.deleteResource("item", itemKey(event, PersistentVolumeClaimNameTag))
 		}
 	case "replication_controller":
 		switch strings.ToLower(chgType.String()) {
 		case "create":
-			result, err = c.ox.putReplicationController(event)
+			fallthrough
 		case "update":
-			// do nothing for now
+			return c.ox.putReplicationController(event)
 		case "delete":
-			c.ox.deleteReplicationController(event)
+			return c.ox.deleteResource("item", itemKey(event, ReplicationControllerNameTag))
 		}
 	case "ingress":
 		switch strings.ToLower(chgType.String()) {
@@ -233,19 +267,26 @@ func (c *Webhook) process(w http.ResponseWriter, r *http.Request) (*Result, erro
 		case "create":
 			fallthrough
 		case "update":
-			result, err = c.ox.putResourceQuota(event)
+			return c.ox.putResourceQuota(event)
 		case "delete":
-			c.log.Trace("resource quota deletion not implemented")
+			return c.ox.deleteResource("item", itemKey(event, ResourceQuotaNameTag))
 		}
 	}
-	return result, err
+	return nil, nil
 }
 
 // unmarshal the http request into a json like structure
-func (c *Webhook) getRequest(r *http.Request) ([]byte, error) {
+func (c *Webhook) readRequestBody(r *http.Request) ([]byte, error) {
 	bytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
 	}
 	return bytes, nil
+}
+
+func (c *Webhook) handleOther(path string, w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != path {
+		http.NotFound(w, r)
+		return
+	}
 }
