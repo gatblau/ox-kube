@@ -14,27 +14,6 @@
 */
 package main
 
-const (
-	K8SModel                 = "K8S"
-	K8SCluster               = "K8S_CL"
-	K8SNamespace             = "K8S_NS"
-	K8SResourceQuota         = "K8S_RQ"
-	K8SPod                   = "K8S_POD"
-	K8SService               = "K8S_SVC"
-	K8SIngress               = "K8S_INGRESS"
-	K8SReplicationController = "K8S_RC"
-	K8SPersistentVolumeClaim = "K8S_PVC"
-	K8SLink                  = "K8S_LINK"
-)
-
-// a type for the above constants
-type K8SOBJ string
-
-// convert above type to string
-func (t K8SOBJ) String() string {
-	return string(t)
-}
-
 // checks the kube model is defined in Onix
 func (c *Client) modelExists() (bool, error) {
 	model, err := c.getResource("model", K8SModel, nil)
@@ -77,9 +56,9 @@ func (c *Client) putNamespace(event []byte) (*Result, error) {
 
 func (c *Client) putPod(event []byte) (*Result, error) {
 	// gets the pod item information
-	pod, err := item(event, K8SPod, "pod")
+	pod, err := item(event, K8SPod, PodNameTag)
 	if err != nil {
-		c.Log.Errorf("Failed to get POD information: %s.", err)
+		c.Log.Errorf("Failed to get POD information: %s. Event was: %s.", err, event)
 		return nil, err
 	}
 	// push the item to the CMDB
@@ -106,7 +85,7 @@ func (c *Client) putPod(event []byte) (*Result, error) {
 
 func (c *Client) putService(event []byte) (*Result, error) {
 	// gets the service item information
-	item, err := item(event, K8SService, "svc")
+	item, err := item(event, K8SService, ServiceNameTag)
 	if err != nil {
 		c.Log.Errorf("Failed to get SERVICE information: %s.", err)
 		return nil, err
@@ -122,7 +101,7 @@ func (c *Client) putService(event []byte) (*Result, error) {
 
 func (c *Client) putReplicationController(event []byte) (*Result, error) {
 	// gets the service item information
-	item, err := item(event, K8SReplicationController, "rc")
+	item, err := item(event, K8SReplicationController, ReplicationControllerNameTag)
 	if err != nil {
 		c.Log.Errorf("Failed to get REPLICATION CONTROLLER information: %s.", err)
 		return nil, err
@@ -138,7 +117,7 @@ func (c *Client) putReplicationController(event []byte) (*Result, error) {
 
 func (c *Client) putPersistentVolumeClaim(event []byte) (*Result, error) {
 	// gets the persistent volume item information
-	item, err := item(event, K8SPersistentVolumeClaim, "pvc")
+	item, err := item(event, K8SPersistentVolumeClaim, PersistentVolumeClaimNameTag)
 	if err != nil {
 		c.Log.Errorf("Failed to get PERSISTENT VOLUME CLAIM information: %s.", err)
 		return nil, err
@@ -151,7 +130,7 @@ func (c *Client) putPersistentVolumeClaim(event []byte) (*Result, error) {
 
 func (c *Client) putResourceQuota(event []byte) (*Result, error) {
 	// gets the resource quota item information
-	item, err := item(event, K8SResourceQuota, "rq")
+	item, err := item(event, K8SResourceQuota, ResourceQuotaNameTag)
 	if err != nil {
 		c.Log.Errorf("Failed to get RESOURCE QUOTA information: %s.", err)
 		return nil, err

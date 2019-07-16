@@ -25,13 +25,21 @@ import (
 )
 
 const (
-	Key         = "Object.metadata.name"
+	Key         = "Change.name"
 	Created     = "Object.metadata.creationTimestamp"
 	SpecInfo    = "Object.spec"
 	Annotations = "Object.metadata.annotations"
 	Labels      = "Object.metadata.labels"
 	Cluster     = "Change.host"
-	Namespace   = "Object.metadata.namespace"
+	Namespace   = "Change.namespace"
+)
+
+const (
+	PodNameTag                   = "pod"
+	ServiceNameTag               = "svc"
+	ResourceQuotaNameTag         = "rq"
+	ReplicationControllerNameTag = "rc"
+	PersistentVolumeClaimNameTag = "pvc"
 )
 
 type Client struct {
@@ -41,6 +49,27 @@ type Client struct {
 }
 
 type MAP map[string]interface{}
+
+const (
+	K8SModel                 = "K8S"
+	K8SCluster               = "K8S_CL"
+	K8SNamespace             = "K8S_NS"
+	K8SResourceQuota         = "K8S_RQ"
+	K8SPod                   = "K8S_POD"
+	K8SService               = "K8S_SVC"
+	K8SIngress               = "K8S_INGRESS"
+	K8SReplicationController = "K8S_RC"
+	K8SPersistentVolumeClaim = "K8S_PVC"
+	K8SLink                  = "K8S_LINK"
+)
+
+// a type for the above constants
+type K8SOBJ string
+
+// convert above type to string
+func (t K8SOBJ) String() string {
+	return string(t)
+}
 
 // creates a new Onix REST web client
 func NewClient(log *logrus.Entry, cfg *Config) (*Client, error) {
@@ -84,7 +113,6 @@ func (c *Client) makeRequest(method string, resourceName string, key string, pay
 		req *http.Request
 		err error
 	)
-
 	// creates the request
 	if len(key) > 0 {
 		// with key
@@ -98,8 +126,10 @@ func (c *Client) makeRequest(method string, resourceName string, key string, pay
 		return &Result{Message: err.Error(), Error: true}, err
 	}
 
-	// requires a response in json format
-	req.Header.Set("Content-Type", "application/json")
+	if method != "DELETE" {
+		// requires a response in json format
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	// if an authentication Token has been specified then add it to the request header
 	if c.Token != "" && len(c.Token) > 0 {
@@ -209,8 +239,23 @@ func (c *Client) getResource(resourceName string, key string, filter map[string]
 
 // makes a DELETE HTTP request to the WAPI
 func (c *Client) deleteResource(resourceName string, resourceKey string) (*Result, error) {
-	// make an http put request to the service
-	return c.makeRequest(DELETE, resourceName, resourceKey, nil)
+	// make an http delete request to the service
+	result, err := c.makeRequest(DELETE, resourceName, resourceKey, nil)
+
+	if err != nil {
+		c.Log.Errorf("Failed to DELETE %s: %s.", resourceName, err)
+		return nil, err
+	}
+	if result.Error {
+		c.Log.Errorf("Failed to DELETE %s: %s.", resourceName, result.Message)
+		return result, err
+	}
+	if result.Changed {
+		c.Log.Tracef("%s: %s delete successful.", resourceName, resourceKey)
+		return result, err
+	}
+	c.Log.Tracef("%s: %s, Nothing to delete.", resourceName, resourceKey)
+	return result, err
 }
 
 // issues an http put request to the Onix CMDB passing the specified item
@@ -218,6 +263,10 @@ func (c *Client) deleteResource(resourceName string, resourceKey string) (*Resul
 // - resourceName: the WAPI resource name (e.g. item, itemtype, link, etc.)
 // returns the payload key and a success flag
 func (c *Client) putResource(payload Payload, resourceName string) (string, *Result, error) {
+	var (
+		err    error
+		result *Result
+	)
 	// converts the passed-in payload to a JSON bytes reader
 	bytes, err := payload.ToJSON()
 
@@ -225,9 +274,8 @@ func (c *Client) putResource(payload Payload, resourceName string) (string, *Res
 		c.Log.Errorf("Failed to marshall %s data: %s.", resourceName, err)
 		return "", nil, err
 	}
-
 	// makes the http PUT request
-	result, err := c.makeRequest(PUT, resourceName, payload.KeyValue(), bytes)
+	result, err = c.makeRequest(PUT, resourceName, payload.KeyValue(), bytes)
 	if err != nil {
 		c.Log.Errorf("Failed to PUT %s: %s.", resourceName, err)
 		return "", nil, err
@@ -237,9 +285,9 @@ func (c *Client) putResource(payload Payload, resourceName string) (string, *Res
 		return "", result, err
 	}
 	if result.Changed {
-		c.Log.Tracef("%s: %s successfully updated in Onix.", resourceName, payload.KeyValue())
+		c.Log.Tracef("%s: %s update successful.", resourceName, payload.KeyValue())
 		return payload.KeyValue(), result, err
 	}
-	c.Log.Tracef("%s: %s, Onix reports nothing to update.", resourceName, payload.KeyValue())
+	c.Log.Tracef("%s: %s, Nothing to update.", resourceName, payload.KeyValue())
 	return payload.KeyValue(), result, err
 }

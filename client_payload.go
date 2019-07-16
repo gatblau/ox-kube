@@ -34,7 +34,7 @@ func (c *Client) getModel() Payload {
 		ItemTypes: []ItemType{
 			ItemType{
 				Key:         K8SCluster,
-				Name:        "Kuebernetes Cluster",
+				Name:        "Kubernetes Cluster",
 				Description: "An open-source system for automating deployment, scaling, and management of containerized applications.",
 				Model:       K8SModel,
 			},

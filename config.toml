@@ -28,12 +28,12 @@ Metrics = "true"
         Port = "8000"
 
         # the web path of the webhook endpoint
-        Path = "webhook"
+        Path = "/webhook"
 
         # credentials for authenticating webhook endpoint clients
         AuthMode = "basic" # none or basic
         Username = "admin"
-        Password = "kub3"
+        Password = "0n1x"
 
     # broker consumer details
     [Consumers.Broker]

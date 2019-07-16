@@ -27,6 +27,7 @@ type OxKube struct {
 	config *Config
 	log    *logrus.Entry
 	client *Client
+	ready  bool
 }
 
 func (k *OxKube) start() error {
@@ -76,6 +77,8 @@ func (k *OxKube) start() error {
 	} else {
 		k.log.Tracef("KUBE meta-model found in Onix.")
 	}
+	// the webhook is ready to receive incoming connections
+	k.ready = true
 	// start the configured consumer
 	switch k.config.Consumers.Consumer {
 	case "webhook":
@@ -83,6 +86,7 @@ func (k *OxKube) start() error {
 		wh := Webhook{
 			log:    k.log,
 			config: k.config.Consumers.Webhook,
+			ready:  k.ready,
 		}
 		k.log.Tracef("Starting the webhook consumer.")
 		wh.Start(k.client)
